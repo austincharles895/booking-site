@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Bus Booking</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 450px; margin: 30px auto; padding: 20px; background: #f9f9f9; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; text-align: center; color: #222; }
+        .bus-status { font-size: 0.95rem; margin: 10px 0; padding: 12px; border-radius: 6px; border-left: 5px solid #ccc; background: #f0f0f0; }
+        .status-available { border-left-color: #1f7a42; background: #e6f7ed; color: #1f7a42; }
+        .status-full { border-left-color: #bc223f; background: #feecef; color: #bc223f; }
+        .checkbox-group { margin: 20px 0; background: #f5f5f7; padding: 15px; border-radius: 8px; }
+        .checkbox-label { display: block; margin: 12px 0; cursor: pointer; font-size: 1rem; }
+        .checkbox-label input { margin-right: 10px; transform: scale(1.2); }
+        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+        button { width: 100%; padding: 12px; background: #0070f3; color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .message { margin-top: 15px; font-size: 0.95rem; text-align: center; font-weight: bold; }
+        .badge-full { color: #bc223f; font-weight: bold; margin-left: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Bus RSVP</h2>
+    
+    <div id="statusTo" class="bus-status">Checking seats...</div>
+    <div id="statusBack" class="bus-status">Checking seats...</div>
+
+    <form id="bookingForm" style="display: none;">
+        <input type="text" id="userName" placeholder="Enter your full name" required>
+        
+        <div class="checkbox-group">
+            <p style="margin: 0 0 10px 0; font-weight: bold;">Select your trips:</p>
+            
+            <label class="checkbox-label" id="labelTo">
+                <input type="checkbox" id="chkTo"> Bus TO the Wedding
+            </label>
+            
+            <label class="checkbox-label" id="labelBack">
+                <input type="checkbox" id="chkBack"> Bus BACK Home
+            </label>
+        </div>
+
+        <button type="submit" id="submitBtn">Confirm Booking</button>
+    </form>
+    <div id="userMessage" class="message"></div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    const SEAT_LIMIT = 59; 
+    const SUPABASE_URL = "https://mpbcxotdrfhupoznxobx.supabase.co"; 
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wYmN4b3RkcmZodXBvem54b2J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNjU5NjIsImV4cCI6MjA5OTk0MTk2Mn0.FWy4rBT1ygsR26rjfHw9w3AUYUA4QWb5tW5ajI1wv-k";
+    // ---------------------
+
+    const bookingForm = document.getElementById('bookingForm');
+    const userNameInput = document.getElementById('userName');
+    const chkTo = document.getElementById('chkTo');
+    const chkBack = document.getElementById('chkBack');
+    const submitBtn = document.getElementById('submitBtn');
+    const userMessage = document.getElementById('userMessage');
+
+    let toSeatsLeft = SEAT_LIMIT;
+    let backSeatsLeft = SEAT_LIMIT;
+
+    // 1. Fetch live seat tallies
+    async function checkAvailability() {
+        try {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/bookings?select=bus_to_wedding,bus_back_home`, {
+                method: 'GET',
+                headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+            });
+            const data = await response.json();
+            
+            // Count entries where the trip boolean is true
+            const bookedTo = data.filter(b => b.bus_to_wedding === true).length;
+            const bookedBack = data.filter(b => b.bus_back_home === true).length;
+            
+            toSeatsLeft = SEAT_LIMIT - bookedTo;
+            backSeatsLeft = SEAT_LIMIT - bookedBack;
+
+            // Update UI for the trip TO the wedding
+            const statusTo = document.getElementById('statusTo');
+            if (toSeatsLeft <= 0) {
+                statusTo.textContent = "❌ Bus TO Wedding: Fully Booked";
+                statusTo.className = "bus-status status-full";
+                chkTo.disabled = true;
+                chkTo.checked = false;
+                document.getElementById('labelTo').style.opacity = "0.5";
+            } else {
+                statusTo.textContent = `🚌 Bus TO Wedding: ${toSeatsLeft} seats left`;
+                statusTo.className = "bus-status status-available";
+                chkTo.disabled = false;
+                document.getElementById('labelTo').style.opacity = "1";
+            }
+
+            // Update UI for the trip BACK home
+            const statusBack = document.getElementById('statusBack');
+            if (backSeatsLeft <= 0) {
+                statusBack.textContent = "❌ Bus BACK Home: Fully Booked";
+                statusBack.className = "bus-status status-full";
+                chkBack.disabled = true;
+                chkBack.checked = false;
+                document.getElementById('labelBack').style.opacity = "0.5";
+            } else {
+                statusBack.textContent = `🚌 Bus BACK Home: ${backSeatsLeft} seats left`;
+                statusBack.className = "bus-status status-available";
+                chkBack.disabled = false;
+                document.getElementById('labelBack').style.opacity = "1";
+            }
+
+            // If absolutely everything is full, shut down the form inputs
+            if (toSeatsLeft <= 0 && backSeatsLeft <= 0) {
+                bookingForm.innerHTML = "<p style='text-align:center; font-weight:bold; color:#bc223f; margin-top:20px;'>Both buses are completely full!</p>";
+            } else {
+                bookingForm.style.display = "block";
+            }
+
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        }
+    }
+
+    // 2. Process form submission
+    bookingForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const wantTo = chkTo.checked;
+        const wantBack = chkBack.checked;
+        const name = userNameInput.value.trim();
+
+        if (!wantTo && !wantBack) {
+            userMessage.style.color = "#bc223f";
+            userMessage.textContent = "Please select at least one bus trip.";
+            return;
+        }
+
+        submitBtn.disabled = true;
+        userMessage.style.color = "#333";
+        userMessage.textContent = "Reserving your seats...";
+
+        // Refresh numbers right before submitting to stop double-bookings
+        await checkAvailability();
+
+        if ((wantTo && toSeatsLeft <= 0) || (wantBack && backSeatsLeft <= 0)) {
+            userMessage.style.color = "#bc223f";
+            userMessage.textContent = "One of your selected buses filled up just now! Please re-check selections.";
+            submitBtn.disabled = false;
+            return;
+        }
+
+        try {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: name,
+                    bus_to_wedding: wantTo,
+                    bus_back_home: wantBack
+                })
+            });
+
+            if (response.ok) {
+                userMessage.style.color = "#1f7a42";
+                userMessage.textContent = `🎉 Success! Booking confirmed for ${name}.`;
+                userNameInput.value = '';
+                chkTo.checked = false;
+                chkBack.checked = false;
+                await checkAvailability();
+            } else {
+                throw new Error("Failed saving");
+            }
+        } catch (error) {
+            userMessage.style.color = "#bc223f";
+            userMessage.textContent = "An error occurred. Please try again.";
+            submitBtn.disabled = false;
+        }
+    });
+
+    checkAvailability();
+</script>
+
+</body>
+</html>
